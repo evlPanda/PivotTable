@@ -1,0 +1,77 @@
+/* RX_WU0083, Michael Nitschke 24/10/2018 */
+
+class TranslateAttendanceToLegend
+   property string attendance;
+   property string attendanceReason;
+   property string arrivedLate;
+   property string leftEarly;
+   method Translate() Returns string;
+private
+   method PresentReasons() Returns string;
+   method CheckForArrivedLateAndLeftEarlyFlags() Returns string;
+   method AbsentReasons() Returns string;
+end-class;
+
+method Translate
+   /+ Returns String +/
+   Evaluate &attendance
+   When = "Y"
+      Local string &check = "<span class=""fas fa-check cyan"">&nbsp;</span>";
+      Return &check | %This.PresentReasons();
+   When = "N"
+      Return "<span style=""color: orange; font-weight: bold;"">" | %This.AbsentReasons() | "</span>";
+   End-Evaluate;
+   Return &attendance;
+end-method;
+
+method PresentReasons
+   /+ Returns String +/
+   Evaluate &attendanceReason
+   When = "EXAM" /* exam */
+      Return "E";
+   When = "EXCR" /* excursion */
+      Return "C";
+   When = "WEXP" /* work experience */
+      Return "W";
+   When "L"
+      Return "<span style=""color: orange; font-weight: bold;""> L</span>";
+   When "Y"
+      Return "<span style=""color: orange; font-weight: bold;""> Y</span>";
+   When "B"
+      Return "<span style=""color: orange; font-weight: bold;""> B</span>";
+   When-Other
+      Return %This.CheckForArrivedLateAndLeftEarlyFlags();
+   End-Evaluate;
+end-method;
+
+method CheckForArrivedLateAndLeftEarlyFlags
+   /+ Returns String +/
+   If &arrivedLate = "Y" And
+         &leftEarly = "Y" Then
+      Return "<span style=""color: orange; font-weight: bold;""> B</span>";
+   End-If;
+   If &arrivedLate = "Y" Then
+      Return "<span style=""color: orange; font-weight: bold;""> L</span>";
+   End-If;
+   If &leftEarly = "Y" Then
+      Return "<span style=""color: orange; font-weight: bold;""> Y</span>";
+   End-If;
+   Return "";
+end-method;
+
+method AbsentReasons
+   /+ Returns String +/
+   Evaluate &attendanceReason
+   When = "NFA" /* notified absent */
+      Return "N";
+   When = "MCAN" /* meeting cancelled */
+      Return "M"
+   When = "PUBH" /* public holiday */
+      Return "H";
+   When = "SICK" /* notified sick */
+      Return "S";
+   When-Other
+      Return "A";
+   End-Evaluate;
+end-method;
+

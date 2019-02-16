@@ -1,0 +1,268 @@
+/* RX_WU0083, Michael Nitschke 12/09/2018
+
+   Uses parameters for SQL that gets data stored in this format:
+
+	emplid	date		data
+	------	----		----
+	1111	01/02/2018	x
+	1111	08/02/2018	x
+	1111	15/02/2018	y
+	2222	01/02/2018	y
+	2222	08/02/2018	x
+	2222	15/02/2018	x
+
+   Pivots data into this format, with Header and Data information.:
+
+	emplid	01/02/2018	08/02/2018	15/02/2018
+	------	----------	----------	----------
+	1111	x			x			y
+	2222	y			x			x
+
+*/
+
+import RX_ATTENDANCE_TRACKING:Components:AttendanceSummary:TranslateAttendanceToLegend;
+
+class PivotSummaryData
+   method PivotSummaryData();
+   
+   /* Parameters */
+   property string AcadCareer get set;
+   property string Term get set;
+   property number ClassNumber get set;
+   property string CombinedSectionID get set;
+   
+   /* Pivoted data */
+   property array of string Header;
+   property array of array of string Data;
+   
+private
+   instance string &iAcadCareer;
+   instance string &iTerm;
+   instance number &iClassNumber;
+   instance string &iCombinedSectionID;
+   instance array of string &Row;
+   instance string &previousEmplid;
+   instance integer &totalAttendanceAsPresent;
+   method GetDataIfHasParameters();
+   method HasParameters() Returns boolean;
+   method HasParametersForClass() Returns boolean;
+   method HasParametersForCombinedSection() Returns boolean;
+   method GetHeader();
+   method GetData();
+   method GetSQL() Returns SQL;
+   method GetAcadProgAndDescription(&emplid As string, &acadProg As string out, &acadProgDescription As string out);
+   method VeryFirstRow(&emplid As string, &lastName As string, &firstName As string, &acadProg As string, &acadProgDescription As string);
+   method NewRow(&emplid As string, &lastName As string, &firstName As string, &acadProg As string, &acadProgDescription As string);
+   method InitNewRow();
+   method StartRow(&emplid As string, &lastName As string, &firstName As string, &acadProg As string, &acadProgDescription As string);
+   method EndRow();
+   method IncrementTotalAttendanceAsPresent(&attendance As string);
+   method TranslateAttendanceToLegend(&attendance As string out, &attendReason As string, &arrivedLate As string, &leftEarly As string);
+   method NewDateColumn(&date As string, &times As string, &attendance As string);
+   method AddTotalAttendanceToHeader();
+end-class;
+
+method PivotSummaryData
+   %This.Header = CreateArrayRept("", 0);
+   &Row = CreateArrayRept("", 0);
+   %This.Data = CreateArrayRept(&Row, 0);
+end-method;
+
+
+/* --- Parameters trigger getting of data when enough are entered. */
+
+get AcadCareer
+   /+ Returns String +/
+   Return &iAcadCareer
+end-get;
+
+set AcadCareer
+   /+ &NewValue as String +/
+   &iAcadCareer = &NewValue;
+   %This.GetDataIfHasParameters()
+end-set;
+
+get Term
+   /+ Returns String +/
+   Return &iTerm;
+end-get;
+
+set Term
+   /+ &NewValue as String +/
+   &iTerm = &NewValue;
+   %This.GetDataIfHasParameters()
+end-set;
+
+get ClassNumber
+   /+ Returns Number +/
+   Return &iClassNumber;
+end-get;
+
+set ClassNumber
+   /+ &NewValue as Number +/
+   &iClassNumber = &NewValue;
+   %This.GetDataIfHasParameters()
+end-set;
+
+get CombinedSectionID
+   /+ Returns String +/
+   Return &iCombinedSectionID;
+end-get;
+
+set CombinedSectionID
+   /+ &NewValue as String +/
+   &iCombinedSectionID = &NewValue;
+   %This.GetDataIfHasParameters()
+end-set;
+
+/* --- Methods */
+
+method GetDataIfHasParameters
+   If %This.HasParameters() Then
+      %This.GetHeader();
+      %This.GetData();
+      %This.AddTotalAttendanceToHeader();
+   End-If;
+end-method;
+
+method HasParameters
+   /+ Returns Boolean +/
+   Return (%This.HasParametersForClass() Or
+      %This.HasParametersForCombinedSection());
+end-method;
+
+method HasParametersForClass
+   /+ Returns Boolean +/
+   Return (%This.AcadCareer <> "" And
+      %This.Term <> "" And
+      %This.ClassNumber <> 0);
+end-method;
+
+method HasParametersForCombinedSection
+   /+ Returns Boolean +/
+   Return (%This.Term <> "" And
+      %This.CombinedSectionID <> "");
+end-method;
+
+
+method GetHeader
+   %This.Header.Push("Student ID", "Surname", "First Name", "Academic&nbsp;Program", "Description"); /* date columns are added dynamically later. */
+end-method;
+
+method GetData
+   Local SQL &SQL = %This.GetSQL();
+   Local string &emplid, &lastName, &firstName, &acadProg, &acadProgDescription, &date, &times, &attendance, &attendReason, &arrivedLate, &leftEarly;
+   While &SQL.Fetch(&emplid, &lastName, &firstName, &date, &times, &attendance, &attendReason, &arrivedLate, &leftEarly)
+      %This.GetAcadProgAndDescription(&emplid, &acadProg, &acadProgDescription);
+      %This.VeryFirstRow(&emplid, &lastName, &firstName, &acadProg, &acadProgDescription);
+      %This.NewRow(&emplid, &lastName, &firstName, &acadProg, &acadProgDescription);
+      %This.IncrementTotalAttendanceAsPresent(&attendance);
+      %This.TranslateAttendanceToLegend(&attendance, &attendReason, &arrivedLate, &leftEarly);
+      %This.NewDateColumn(&date, &times, &attendance);
+   End-While;
+   %This.EndRow();
+end-method;
+
+method GetSQL
+   /+ Returns SQL +/
+   If %This.CombinedSectionID = "" Then
+      Return CreateSQL(GetHTMLText(HTML.RX_CLASS_ATTENDANCE), %This.Term, %This.ClassNumber);
+   Else
+      Return CreateSQL(GetHTMLText(HTML.RX_COMBINED_SECTION_ATTENDANCE), %This.Term, %This.CombinedSectionID);
+   End-If;
+end-method;
+
+method GetAcadProgAndDescription
+   /+ &emplid as String, +/
+   /+ &acadProg as String out, +/
+   /+ &acadProgDescription as String out +/
+   SQLExec(SQL.RX_ACAD_PROG_FOR_STDNT_ENRL, &emplid, %This.AcadCareer, %This.Term, %This.ClassNumber, &acadProg, &acadProgDescription);
+end-method;
+
+method VeryFirstRow
+   /+ &emplid as String, +/
+   /+ &lastName as String, +/
+   /+ &firstName as String, +/
+   /+ &acadProg as String, +/
+   /+ &acadProgDescription as String +/
+   If &previousEmplid <> "" Then
+      Return;
+   End-If;
+   %This.StartRow(&emplid, &lastName, &firstName, &acadProg, &acadProgDescription);
+   &previousEmplid = &emplid;
+end-method;
+
+method NewRow
+   /+ &emplid as String, +/
+   /+ &lastName as String, +/
+   /+ &firstName as String, +/
+   /+ &acadProg as String, +/
+   /+ &acadProgDescription as String +/
+   If &previousEmplid <> &emplid Then
+      %This.EndRow();
+      %This.InitNewRow();
+      %This.StartRow(&emplid, &lastName, &firstName, &acadProg, &acadProgDescription);
+   End-If;
+   &previousEmplid = &emplid;
+end-method;
+
+method InitNewRow
+   &Row = CreateArrayRept("", 0);
+   &totalAttendanceAsPresent = 0;
+end-method;
+
+method StartRow
+   /+ &emplid as String, +/
+   /+ &lastName as String, +/
+   /+ &firstName as String, +/
+   /+ &acadProg as String, +/
+   /+ &acadProgDescription as String +/
+   &Row.Push(&emplid);
+   &Row.Push(&lastName);
+   &Row.Push(&firstName);
+   &Row.Push(&acadProg);
+   &Row.Push(&acadProgDescription);
+end-method;
+
+method EndRow
+   &Row.Push(&totalAttendanceAsPresent);
+   %This.Data.Push(&Row);
+end-method;
+
+method IncrementTotalAttendanceAsPresent
+   /+ &attendance as String +/
+   If &attendance = "Y" Then
+      &totalAttendanceAsPresent = &totalAttendanceAsPresent + 1;
+   End-If;
+end-method;
+
+method TranslateAttendanceToLegend
+   /+ &attendance as String out, +/
+   /+ &attendReason as String, +/
+   /+ &arrivedLate as String, +/
+   /+ &leftEarly as String +/
+   Local any &TranslateAttendance = create RX_ATTENDANCE_TRACKING:Components:AttendanceSummary:TranslateAttendanceToLegend();
+   &TranslateAttendance.attendance = &attendance;
+   &TranslateAttendance.attendanceReason = &attendReason;
+   &TranslateAttendance.arrivedLate = &arrivedLate;
+   &TranslateAttendance.leftEarly = &leftEarly;
+   &attendance = &TranslateAttendance.Translate();
+end-method;
+
+method NewDateColumn
+   /+ &date as String, +/
+   /+ &times as String, +/
+   /+ &attendance as String +/
+   Local string &dateAndTimes;
+   &dateAndTimes = &dateAndTimes | &date | "<br>";
+   &dateAndTimes = &dateAndTimes | "<span style=""font-size: smaller;"">" | Substitute(&times, " ", "&nbsp;") | "</span>";
+   If %This.Header.Find(&dateAndTimes) = 0 Then
+      %This.Header.Push(&dateAndTimes);
+   End-If;
+   &Row.Push(&attendance);
+end-method;
+
+method AddTotalAttendanceToHeader
+   %This.Header.Push("Total Present");
+end-method;
+

@@ -1,0 +1,58 @@
+/* RX_WU0083, Michael Nitschke 24/10/2018 */
+
+import RX_UTILS_PKG:Table:TableWithFixedColumns:Table;
+
+class SummaryTable extends RX_UTILS_PKG:Table:TableWithFixedColumns:Table
+   method SummaryTable();
+protected
+   method TableData(&Row As array of string, &column As integer, &class As string);
+private
+   method AlignDateColumnsToCenter(&column As integer) Returns string;
+   method GetExtraSortParameters() Returns string;
+   method CheckForProxyEmplid() Returns string;
+end-class;
+
+method SummaryTable
+   %Super = create RX_UTILS_PKG:Table:TableWithFixedColumns:Table();
+   %Super.ExtraSortParameters = %This.GetExtraSortParameters();
+end-method;
+
+method TableData
+   /+ &Row as Array of String, +/
+   /+ &column as Integer, +/
+   /+ &class as String +/
+   Local string &tableData = &Row [&column];
+   %Super.HTML = %Super.HTML | "    <td" | %This.AlignDateColumnsToCenter(&column) | " nowrap"">" | &tableData | " asd</td>" | Char(13);
+end-method;
+
+method AlignDateColumnsToCenter
+   /+ &column as Integer +/
+   /+ Returns String +/
+   If &column < 6 Then
+      Return " align=""left"" ";
+   End-If;
+   Return " align=""center"" ";
+end-method;
+
+method GetExtraSortParameters
+   /+ Returns String +/
+   Local string &href;
+   &href = &href | "&CLASS_NBR=" | %Request.GetParameter("CLASS_NBR");
+   &href = &href | "&CLASS_SECTION=" | %Request.GetParameter("CLASS_SECTION");
+   &href = &href | "&EMPLID=" | %This.CheckForProxyEmplid();
+   &href = &href | "&INSTITUTION=TAFEN";
+   &href = &href | "&STRM=" | %Request.GetParameter("STRM");
+   &href = &href | "&SCTN_COMBINED_ID=" | %Request.GetParameter("SCTN_COMBINED_ID");
+   &href = &href | "&EMPLID_PROXY_FOR=" | %Request.GetParameter("EMPLID_PROXY_FOR");
+   &href = &href | "&SUPPRESS_COMBINED_SECTION=" | %Request.GetParameter("SUPPRESS_COMBINED_SECTION");
+   Return &href;
+end-method;
+
+method CheckForProxyEmplid
+   /+ Returns String +/
+   If %Request.GetParameter("EMPLID_PROXY_FOR") <> "" Then
+      Return %Request.GetParameter("EMPLID_PROXY_FOR");
+   End-If;
+   Return %EmployeeId;
+end-method;
+

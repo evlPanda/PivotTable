@@ -1,0 +1,62 @@
+select 
+
+  emplid
+, last_name
+, first_name
+, to_char(class_attend_dt, 'DD/MM/YYYY') AS class_attend_dt 
+, times
+, attend_present
+, attend_reason
+, attend_tardy
+, attend_left_early
+from (
+
+	with all_attend_dates_and_all_emplids (institution, strm, class_nbr, attend_tmplt_nbr, class_attend_dt, times, emplid, acad_career) as (
+	    select distinct 
+	      b.institution
+	    , b.strm
+	    , b.class_nbr
+	    , b.attend_tmplt_nbr
+	    , b.class_attend_dt
+	    , to_char(b.attend_from_time, 'HH:MI') || ' - ' || to_char(b.attend_to_time, 'HH:MI') as times   
+		, c.emplid
+	    , c.acad_career   
+	    from ps_sctn_cmbnd a 
+	    inner join ps_attend_tmplt b
+	        on b.institution = a.institution
+	        and b.strm = a.strm
+	        and b.class_nbr = a.class_nbr
+	    inner join ps_class_attendnce c
+	        on c.institution = b.institution
+	        and c.strm = b.strm
+	        and c.class_nbr = b.class_nbr
+	    where a.institution = 'TAFEN'
+	    and a.strm = :1
+	    and a.sctn_combined_id = :2
+	)
+
+    select distinct
+      a.emplid
+    , c.last_name
+	, c.first_name
+    , a.class_attend_dt
+    , a.times
+    , max(b.attend_present) as attend_present
+    , max(b.attend_reason) as attend_reason
+    , max(b.attend_tardy) as attend_tardy
+    , max(b.attend_left_early) as attend_left_early
+    from all_attend_dates_and_all_emplids a
+    left outer join ps_class_attendnce b
+        on b.emplid = a.emplid
+        and b.acad_career = a.acad_career  
+        and b.institution = a.institution  
+        and b.strm = a.strm  
+        and b.class_nbr = a.class_nbr
+        and b.attend_tmplt_nbr = a.attend_tmplt_nbr  
+    inner join ps_names_vw c 
+       on c.emplid = a.emplid 
+       and c.name_type = 'PRF' 
+    group by a.emplid, c.last_name, c.first_name, a.class_attend_dt, a.times
+    order by a.emplid, class_attend_dt
+
+) x
